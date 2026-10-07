@@ -1,0 +1,186 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  backend:
+    name: Backend — lint, typecheck, test, build
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bizflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bizflow_test?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bizflow_test?schema=public
+      JWT_SECRET: ci-test-secret
+      NODE_ENV: test
+      ALLOW_DEV_RESET_TOKENS: "true"
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npx oxlint
+
+      - name: Type checking
+        run: npx tsc --noEmit
+
+      - name: Prisma generate
+        run: npx prisma generate
+
+      - name: Validate Prisma schema
+        run: npx prisma validate
+
+      - name: Migrate test database
+        run: npx prisma migrate deploy
+
+      - name: Tests
+        run: npm test
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: Playwright E2E (browser)
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: bizflow_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+    env:
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bizflow_test?schema=public
+      TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bizflow_test?schema=public
+      JWT_SECRET: ci-test-secret
+      NODE_ENV: test
+      ALLOW_DEV_RESET_TOKENS: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install root (Playwright)
+        run: npm ci
+
+      - name: Install backend
+        run: npm ci
+        working-directory: backend
+
+      - name: Install frontend
+        run: npm ci
+        working-directory: frontend
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Migrate test database
+        run: npx prisma migrate deploy
+        working-directory: backend
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/bizflow_test?schema=public
+
+      - name: Start API server
+        run: nohup npx tsx src/index.ts > /tmp/api.log 2>&1 &
+        working-directory: backend
+
+      - name: Start web server
+        run: nohup npm run dev -- --port 5173 > /tmp/web.log 2>&1 &
+        working-directory: frontend
+
+      - name: Wait for servers
+        run: |
+          for i in $(seq 1 45); do
+            api=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:4000/api/auth/login || true)
+            web=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5173/ || true)
+            if [ "$api" != "000" ] && [ "$web" = "200" ]; then break; fi
+            sleep 2
+          done
+          echo "api=$api web=$web"
+          [ "$api" != "000" ] && [ "$web" = "200" ]
+
+      - name: Run E2E tests
+        run: npx playwright test
+        # screenshots.spec.ts self-skips without GENERATE_SCREENSHOTS=1
+
+  frontend:
+    name: Frontend — lint, typecheck, build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Install
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Type checking
+        run: npx tsc --noEmit
+
+      - name: Build
+        run: npm run build
+
+  docker:
+    name: Docker images build
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build backend image
+        run: docker build -t bizflow-api:ci ./backend
+
+      - name: Build frontend image
+        run: docker build -t bizflow-web:ci ./frontend
+
+      - name: Validate compose file
+        run: |
+          POSTGRES_PASSWORD=dummy JWT_SECRET=dummy \
+            docker compose config --quiet && echo "compose config OK"
