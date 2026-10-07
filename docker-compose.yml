@@ -1,0 +1,67 @@
+# BIZFLOW — development & production compose file.
+#
+# All secrets come from environment variables. Copy .env.example to .env
+# and fill in real values. NEVER commit .env.
+#
+#   cp .env.example .env
+#   docker compose up --build
+#
+# Seed demo data intentionally only (never in production):
+#   SEED_DEMO_DATA=true docker compose exec api npm run prisma:seed
+
+services:
+  db:
+    image: postgres:16
+    container_name: bizflow-db
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER:-bizflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      POSTGRES_DB: ${POSTGRES_DB:-bizflow}
+    ports:
+      - "${DB_PORT:-5432}:5432"
+    volumes:
+      - bizflow-pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-bizflow}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: ./backend
+    container_name: bizflow-api
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      NODE_ENV: ${NODE_ENV:-production}
+      DATABASE_URL: postgresql://${POSTGRES_USER:-bizflow}:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}@db:5432/${POSTGRES_DB:-bizflow}?schema=public
+      JWT_SECRET: ${JWT_SECRET:?set JWT_SECRET in .env}
+      PORT: 4000
+      AI_PROVIDER: ${AI_PROVIDER:-}
+      AI_API_URL: ${AI_API_URL:-}
+      AI_API_KEY: ${AI_API_KEY:-}
+      AI_MODEL: ${AI_MODEL:-gpt-4o-mini}
+      ALLOW_DEV_RESET_TOKENS: "false"
+      CORS_ORIGIN: ${CORS_ORIGIN:-}
+      EMAIL_PROVIDER: ${EMAIL_PROVIDER:-none}
+      FRONTEND_URL: ${FRONTEND_URL:-}
+      UPLOAD_DIR: /app/uploads
+      UPLOAD_MAX_MB: ${UPLOAD_MAX_MB:-10}
+      RATE_LIMIT_MAX: ${RATE_LIMIT_MAX:-600}
+    volumes:
+      - bizflow-uploads:/app/uploads
+    ports:
+      - "${API_PORT:-4000}:4000"
+
+  web:
+    build: ./frontend
+    container_name: bizflow-web
+    depends_on:
+      - api
+    ports:
+      - "${WEB_PORT:-8080}:80"
+
+volumes:
+  bizflow-pg:
+  bizflow-uploads:
