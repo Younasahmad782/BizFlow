@@ -9,12 +9,13 @@
  */
 import { test } from '@playwright/test'
 import { mkdirSync } from 'fs'
-import { dirname, join } from 'path'
-import { fileURLToPath } from 'url'
+import { join } from 'path'
 
 // Portable: <repo>/docs/screenshots (no absolute paths, no work at import time
 // — CI runners must be able to load this file without side effects).
-const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots')
+// Note: specs run as CommonJS, so use __dirname (not import.meta).
+/* eslint-disable no-undef */
+const DIR = join(__dirname, '..', 'docs', 'screenshots')
 
 const all: Array<[string, string]> = [
   ['login', '/login'],
