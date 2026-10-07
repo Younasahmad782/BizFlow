@@ -1,0 +1,57 @@
+# ── Dependencies ──────────────────────────────────────────────
+node_modules/
+
+# ── Build outputs ─────────────────────────────────────────────
+dist/
+build/
+.next/
+out/
+
+# ── Environment files (NEVER commit real secrets) ─────────────
+.env
+.env.*
+!.env.example
+
+# ── Logs ──────────────────────────────────────────────────────
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# ── Test & report artifacts ───────────────────────────────────
+coverage/
+playwright-report/
+test-results/
+.nyc_output/
+
+# ── Uploads & local data (never commit user/test files) ───────
+uploads/
+data/
+tmp/
+temp/
+*.db
+*.sqlite
+*.sqlite3
+
+# ── OS files ──────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# ── IDE / editor files ────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+
+# ── Misc ──────────────────────────────────────────────────────
+*.pem
+*.key
