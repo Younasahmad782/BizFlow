@@ -9,9 +9,12 @@
  */
 import { test } from '@playwright/test'
 import { mkdirSync } from 'fs'
+import { dirname, join } from 'path'
+import { fileURLToPath } from 'url'
 
-const DIR = '/home/hatch/workspace/bizflow/docs/screenshots'
-mkdirSync(DIR, { recursive: true })
+// Portable: <repo>/docs/screenshots (no absolute paths, no work at import time
+// — CI runners must be able to load this file without side effects).
+const DIR = join(dirname(fileURLToPath(import.meta.url)), '..', 'docs', 'screenshots')
 
 const all: Array<[string, string]> = [
   ['login', '/login'],
@@ -35,6 +38,7 @@ const plan: Array<[string, string]> = needsLogin ? [['__login', '/login'], ...to
 
 test('capture docs screenshots', async ({ page }) => {
   test.skip(process.env.GENERATE_SCREENSHOTS !== '1', 'screenshot generation only')
+  mkdirSync(DIR, { recursive: true })
   await page.setViewportSize({ width: 1440, height: 900 })
 
   await page.goto('/login', { waitUntil: 'domcontentloaded' })
